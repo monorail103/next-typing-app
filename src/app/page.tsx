@@ -1,101 +1,188 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useRef } from "react";
+import type { Word } from "./_types/Word";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [word, setWord] = useState<Word>({ id: '', text: '', romaji: '', level: 0, category: '' });
+  const [time, setTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [input, setInput] = useState('');
+  const [score, setScore] = useState(0);
+  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isCorrectSoFar, setIsCorrectSoFar] = useState(true);
+  
+  // ランダムな単語を一つ取得
+  const fetchWord = async () => {
+    try {
+      const response = await fetch('/api/words');
+      const data = await response.json();
+      
+      // APIのレスポンス構造を確認
+      console.log('API response:', data);
+      
+      // APIレスポンスがそのままWordオブジェクトの場合
+      if (data.id !== undefined) {
+        setWord(data);
+      } 
+      // APIレスポンスがdata.textにWordオブジェクトを含む場合
+      else if (data.text && typeof data.text === 'object') {
+        setWord(data.text);
+      }
+      // それ以外の場合はエラーログを出力
+      else {
+        console.error('Unexpected API response format:', data);
+      }
+    } catch (error) {
+      console.error('Error fetching word:', error);
+    }
+  }
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // 入力をハンドルする
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInput(value);
+    
+    // 入力途中のチェック
+    if (word.romaji.startsWith(value)) {
+      setIsCorrectSoFar(true);
+    } else {
+      setIsCorrectSoFar(false);
+    }
+    
+    // 入力した単語が正しいか判定
+    if (value === word.romaji) {
+      // スコアを更新
+      setScore(prevScore => prevScore + 1);
+      // 入力フィールドをクリア
+      setInput('');
+      // 次の単語を取得
+      fetchWord();
+      // 正解状態をリセット
+      setIsCorrectSoFar(true);
+    }
+  };
+
+  // スタートボタンをクリックしたときの処理
+  const handleStart = () => {
+    // スコアをリセット
+    setScore(0);
+    setInput('');
+    setIsCorrectSoFar(true);
+    
+    // 最初の単語を取得
+    fetchWord();
+    
+    // タイマー開始
+    setIsPlaying(true);
+    setTime(0);
+
+    const intervalTimer = setInterval(() => {
+      setTime(prevTime => prevTime + 1);
+    }, 1000);
+    
+    setTimer(intervalTimer);
+    
+    // 入力フィールドにフォーカス
+    if (inputRef.current) inputRef.current.focus();
+  }
+
+  // ゲームを終了する
+  const handleStop = () => {
+    setIsPlaying(false);
+    if (timer) clearInterval(timer);
+    setTimer(null);
+  }
+
+  // タイマーが60秒経過したらゲームを終了
+  useEffect(() => {
+    if (time >= 60) {
+      handleStop();
+    }
+  }, [time]);
+
+  // ゲーム終了時のクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [timer]);
+
+  return (
+    <div className="container mx-auto p-4 max-w-2xl">
+      <h1 className="text-2xl font-bold mb-4">タイピングゲーム</h1>
+      
+      <div className="mb-4">
+      <p>制限時間: {isPlaying ? 60 - time : 60}秒</p>
+      <p>スコア: {score}単語</p>
+      </div>
+      
+      {!isPlaying ? (
+      <button 
+        onClick={handleStart}
+        className="bg-blue-500 text-white px-4 py-2 rounded"
+      >
+        スタート
+      </button>
+      ) : (
+      <div className="space-y-4">
+        <div 
+        className="p-4 bg-gray-100 rounded transition-all duration-300 transform animate-fade-in"
+        key={word.id} // キーを追加して単語が変わるたびに要素が再レンダリングされるようにする
+        >
+        <p className="mb-2">次の単語を入力してください:</p>
+        <p className="text-xl font-bold animate-bounce-in">{word.text}</p>
+        <p className="text-sm text-gray-500">{word.romaji}</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+        
+        <input
+        ref={inputRef}
+        type="text"
+        value={input}
+        onChange={handleInputChange}
+        className={`w-full p-2 border rounded transition-colors duration-300 ${
+          input.length > 0 
+          ? (isCorrectSoFar ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50') 
+          : 'border-gray-300'
+        }`}
+        autoFocus
+        />
+        
+        <button 
+        onClick={handleStop}
+        className="bg-red-500 text-white px-4 py-2 rounded"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        終了
+        </button>
+      </div>
+      )}
+      
+      {!isPlaying && time > 0 && (
+      <div className="mt-4 p-4 bg-green-100 rounded">
+        <h2 className="text-xl font-bold">結果</h2>
+        <p>60秒間で{score}単語入力できました！</p>
+        <p>平均: {(score / (time / 60)).toFixed(1)}単語/分</p>
+      </div>
+      )}
+      
+      <style jsx global>{`
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes bounceIn {
+        0% { transform: scale(0.8); opacity: 0; }
+        70% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1); }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.3s ease-out;
+      }
+      .animate-bounce-in {
+        animation: bounceIn 0.4s ease-out;
+      }
+      `}</style>
     </div>
   );
 }
