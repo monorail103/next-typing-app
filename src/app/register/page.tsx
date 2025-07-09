@@ -24,7 +24,6 @@ export default function Register() {
             await setDoc(doc(db, "users", user.uid), {
                 username: username,
                 email: email,
-                point: 0
             });
             router.push("/");
         } catch (error) {
